@@ -2,6 +2,24 @@
 - name: include stat_ceph_files.yml
   include: stat_ceph_files.yml
 
+
+- name: debug ceph_health.stdout_lines
+  debug:
+    msg: "{{ ceph_health.stdout_lines }}"
+
+- name: debug ceph_health.stdout_lines | length
+  debug:
+    msg: "{{ ceph_health.stdout_lines | length }}"
+
+- name: debug ceph_health.stdout_lines | length == 0
+  debug:
+    msg: "{{ ceph_health.stdout_lines | length == 0 }}"
+
+
+- name: stop here
+  fail:
+    msg: "stop"
+
 - name: fail if we find existing cluster files
   fail:
     msg: "looks like no cluster is running but ceph files are present, please remove them"
