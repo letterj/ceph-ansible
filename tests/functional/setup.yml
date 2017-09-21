@@ -22,3 +22,9 @@
         state: present
       when:
         - not is_atomic
+
+    - name: reboot the machines
+      command: reboot
+
+    - name: wait for the machines to come up
+      local_action: wait_for port=22 delay=10 timeout=3600
