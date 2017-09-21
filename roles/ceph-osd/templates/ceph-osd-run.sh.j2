@@ -24,21 +24,39 @@ function expose_devices {
 }
 
 function expose_partitions {
+  local tmp_disk
+  tmp_disk=$(mktemp)
+  docker run --name=expose_partitions${1} --privileged=true -v /dev:/dev --entrypoint /usr/sbin/ceph-disk docker.io/ceph/daemon:tag-build-master-luminous-ubuntu-16.04 list /dev/${1} > $tmp_disk
   local partition
-  for partition in Block.wal Block.db Journal; do
-    if docker logs ceph-osd-prepare-{{ ansible_hostname }}-devdev${1} |& grep -Eo "$partition is GPT partition"; then
-      if [[ "$partition" == "Block.wal" ]]; then
-        part=$(docker logs ceph-osd-prepare-{{ ansible_hostname }}-devdev${1} |& grep "$partition is GPT partition" | grep -Eo /dev/disk/by-partuuid/${REGEX} | uniq)
-        DOCKER_ENV="$DOCKER_ENV -e OSD_BLUESTORE_BLOCK_WAL=$part"
-      elif [[ "$partition" == "Block.db" ]]; then
-        part=$(docker logs ceph-osd-prepare-{{ ansible_hostname }}-devdev${1} |& grep "$partition is GPT partition" | grep -Eo /dev/disk/by-partuuid/${REGEX} | uniq)
-        DOCKER_ENV="$DOCKER_ENV -e OSD_BLUESTORE_BLOCK_DB=$part"
-      elif [[ "$partition" == "Journal" ]]; then
-        part=$(docker logs ceph-osd-prepare-{{ ansible_hostname }}-devdev${1} |& grep "$partition is GPT partition" | grep -Eo /dev/disk/by-partuuid/${REGEX} | uniq)
-        DOCKER_ENV="$DOCKER_ENV -e OSD_JOURNAL=$part"
+  for partition in block.wal block.db journal; do
+    if [[ "$partition" == "journal" ]]; then
+      if grep -o $partition $tmp_disk; then
+        # NOTE(leseb): awk looks for a pattern and print the next column after it
+        # Also, the head -1 if for dmcrypt
+        part=$(awk -v pattern=${partition} '$0 ~ pattern { f=NR }; f && (NR-1 == f)' RS=" " $tmp_disk | head -1)
+        # NOTE(leseb): ceph-disk output with bluestore return '/dev/sda1,', so we remove ',' from the variable
+        DOCKER_ENV="$DOCKER_ENV -e OSD_JOURNAL=${part//,}"
+      fi
+    elif [[ "$partition" == "block.db" ]]; then
+      if grep -o $partition $tmp_disk; then
+        # NOTE(leseb): awk looks for a pattern and print the next column after it
+        # Also, the head -1 if for dmcrypt
+        part=$(awk -v pattern=${partition} '$0 ~ pattern { f=NR }; f && (NR-1 == f)' RS=" " $tmp_disk | head -1)
+        # NOTE(leseb): ceph-disk output with bluestore return '/dev/sda1,', so we remove ',' from the variable
+        DOCKER_ENV="$DOCKER_ENV -e OSD_BLUESTORE_BLOCK_DB=${part//,}"
+      fi
+    elif [[ "$partition" == "block.wal" ]]; then
+      if grep -o $partition $tmp_disk; then
+        # NOTE(leseb): awk looks for a pattern and print the next column after it
+        # Also, the head -1 if for dmcrypt
+        part=$(awk -v pattern=${partition} '$0 ~ pattern { f=NR }; f && (NR-1 == f)' RS=" " $tmp_disk | head -1)
+        # NOTE(leseb): ceph-disk output with bluestore return '/dev/sda1,', so we remove ',' from the variable
+        DOCKER_ENV="$DOCKER_ENV -e OSD_BLUESTORE_BLOCK_WAL=${part//,}"
       fi
     fi
   done
+  rm -f $tmp_disk
+  docker rm -f expose_partitions${1}
 }
 
 #expose_devices $1
